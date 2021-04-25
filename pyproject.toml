@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "entropy-qpu"
+version = "0.1.0a10"
+description = ""
+authors = ["Lior Ella <lior@quantum-machines.co>"]
+
+[tool.poetry.dependencies]
+python = "^3.7.1"
+
+[tool.poetry.dev-dependencies]
+black = "^20.8b1"
+poethepoet = "^0.10.0"
+pytest = "^6.2.3"
+flake8 = "^3.9.1"
+flake8-bugbear = "^21.4.3"
+
+[tool.black]
+target-version = ["py37"]
+
+[tool.poe.tasks]
+format = "black"
+check_format = "black --check"
+lint = "flake8"
+test = "pytest"
+check = ["check_format", "lint", "test"]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
