@@ -130,3 +130,5 @@ dmypy.json
 
 # pycharm project file
 .idea
+
+reports
