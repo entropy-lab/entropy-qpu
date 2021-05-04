@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "entropylab-qpu"
-version = "0.1.0a10"
+name = "entropylab-qpudb"
+version = "0.1.1-alpha0"
 description = ""
 authors = ["Lior Ella <lior@quantum-machines.co>"]
 

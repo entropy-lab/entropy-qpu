@@ -21,8 +21,6 @@ jobs:
       - name: Upload assets
         run: |
           RELEASE_VERSION="${GITHUB_REF#refs/*/}"
-          PYTHON_VERSION=$(poetry version -s)
-          PYTHON_PREFIX=entropylab_qpu-${PYTHON_VERSION}
           gh release upload ${RELEASE_VERSION} ./dist/*.tar.gz ./dist/*-py3-none-any.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
