@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import os
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
@@ -133,35 +134,45 @@ class QpuDatabaseConnectionBase(Instrument):
     def __init__(self, dbname, history_index=None, path=None):
         if path is None:
             path = os.getcwd()
-        dbfilename = _db_file_from_path(path, dbname)
-        histfilename = _hist_file_from_path(path, dbname)
-        if not os.path.exists(dbfilename):
-            raise FileNotFoundError(f"QPU DB {dbname} does not exist")
-        super().__init__()
+        self._path = path
         self._dbname = dbname
-        self._history_index = history_index
-        db_hist = ZODB.DB(histfilename)
-        self._con_hist = db_hist.open(
-            transaction_manager=transaction.TransactionManager()
-        )
-        self._con_hist.transaction_manager.begin()
+        dbfilename = _db_file_from_path(self._path, self._dbname)
+        if not os.path.exists(dbfilename):
+            raise FileNotFoundError(f"QPU DB {self._dbname} does not exist")
+        self._db = None
+        super().__init__()
+        self._con_hist = self.open_hist_db()
+        self._readonly, self._con = self.open_data_db(history_index)
+
+    def open_data_db(self, history_index):
+        dbfilename = _db_file_from_path(self._path, self._dbname)
         hist_entries = self._con_hist.root()["entries"]
-        if self._history_index is not None:
-            self._readonly = True
-            message_index = self._history_index
-            at = self._con_hist.root()["entries"][self._history_index]["timestamp"]
+        if history_index is not None:
+            readonly = True
+            message_index = history_index
+            at = self._con_hist.root()["entries"][history_index]["timestamp"]
         else:
-            self._readonly = False
+            readonly = False
             message_index = len(hist_entries) - 1
             at = None
-        db = ZODB.DB(dbfilename)
-        self._con = db.open(transaction_manager=transaction.TransactionManager(), at=at)
-        assert self._con.isReadOnly() == self._readonly, "internal error: Inconsistent readonly state"
-        self._con.transaction_manager.begin()
+        self._db = ZODB.DB(dbfilename) if self._db is None else self._db
+        con = self._db.open(transaction_manager=transaction.TransactionManager(), at=at)
+        assert con.isReadOnly() == readonly, "internal error: Inconsistent readonly state"
+        con.transaction_manager.begin()
         print(
-            f"opening qpu database {dbname} from "
+            f"opening qpu database {self._dbname} from "
             f"commit {self._str_hist_entry(hist_entries[message_index])} at index {message_index}"
         )
+        return readonly, con
+
+    def open_hist_db(self):
+        histfilename = _hist_file_from_path(self._path, self._dbname)
+        db_hist = ZODB.DB(histfilename)
+        con_hist = db_hist.open(
+            transaction_manager=transaction.TransactionManager()
+        )
+        con_hist.transaction_manager.begin()
+        return con_hist
 
     def __enter__(self):
         return self
@@ -248,16 +259,21 @@ class QpuDatabaseConnectionBase(Instrument):
         """
         if self._readonly:
             raise ReadOnlyError("Attempting to commit to a DB in a readonly state")
+        lt_before = self._con._db.lastTransaction()
         self._con.transaction_manager.commit()
-        hist_root = self._con_hist.root()
-        hist_entries = hist_root["entries"]
-        now = datetime.utcnow()
-        hist_entries.append({"timestamp": now, "message": message})
-        self._con_hist.transaction_manager.commit()
-        print(
-            f"commiting qpu database {self._dbname} "
-            f"with commit {self._str_hist_entry(hist_entries[-1])} at index {len(hist_entries) - 1}"
-        )
+        lt_after = self._con._db.lastTransaction()
+        if lt_before != lt_after:  # this means a commit actually took place
+            hist_root = self._con_hist.root()
+            hist_entries = hist_root["entries"]
+            now = datetime.utcnow()
+            hist_entries.append({"timestamp": now, "message": message})
+            self._con_hist.transaction_manager.commit()
+            print(
+                f"commiting qpu database {self._dbname} "
+                f"with commit {self._str_hist_entry(hist_entries[-1])} at index {len(hist_entries) - 1}"
+            )
+        else:
+            print('did not commit')
 
     def abort(self):
         self._con.transaction_manager.abort()
@@ -282,6 +298,18 @@ class QpuDatabaseConnectionBase(Instrument):
     @staticmethod
     def _str_hist_entry(hist_entry):
         return f"<timestamp: {hist_entry['timestamp'].strftime('%m/%d/%Y %H:%M:%S')}, message: {hist_entry['message']}>"
+
+    def restore_from_history(self, history_index: int) -> None:
+        """
+        restore the current unmodified and open DB data to be the same as the one from `history_index`.
+        Will not commit the restored data.
+
+        :param history_index: History index from which to restore
+        """
+        readonly, con = self.open_data_db(history_index)
+        self._con.root()["elements"] = deepcopy(con.root()["elements"])
+        con.close()
+        print(con)
 
 
 class QpuDatabaseConnection(QpuDatabaseConnectionBase):

@@ -99,9 +99,11 @@ def test_simple_set_with_commit(testdb):
         db.set("q2", "p1", 11.0)
         print(db.get("q2", "p1"))
         db.commit()
+        assert len(db.get_history()) == 2
 
     with QpuDatabaseConnectionBase(testdb) as db:
         print()
+        assert len(db.get_history()) == 2
         print(db.get("q2", "p1"))
         assert db.get("q2", "p1").value == 11.0
 
@@ -118,11 +120,14 @@ def test_set_with_commit_multiple(testdb):
         print()
         db.set("q2", "p1", 11.0)
         print(db.get("q2", "p1"))
+        assert len(db.get_history()) == 1
         db.commit()
+        assert len(db.get_history()) == 2
 
     with QpuDatabaseConnectionBase(testdb) as db:
         db.set("q1", "p1", [1, 2])
         db.commit()
+        assert len(db.get_history()) == 3
 
     with QpuDatabaseConnectionBase(testdb) as db:
         print()
@@ -186,6 +191,36 @@ def test_fail_on_commit_to_readonly(testdb):
     with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
         with pytest.raises(ReadOnlyError):
             db.commit('trying')
+
+
+def test_commit_unmodified(testdb):
+    with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        print()
+        print(_parseRaw(db._con._db.lastTransaction()))
+        assert len(db.get_history()) == 1
+        db.commit("my first commit - unmodified")
+        print(_parseRaw(db._con._db.lastTransaction()))
+        assert len(db.get_history()) == 1
+
+
+def test_restore_from_history(testdb):
+    with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        print()
+        db.set("q2", "p1", 11.0)
+        print(db.get("q2", "p1"))
+        db.commit("my first commit")
+
+    with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        print()
+        assert db.get("q2", "p1").value == 11.0
+        db.restore_from_history(0)
+        print(db.get("q2", "p1"))
+        assert db.get("q2", "p1").value == 3.4
+
+    # make sure wasn't committed
+    with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        print()
+        assert db.get("q2", "p1").value == 11.0
 
 
 def test_print(testdb):

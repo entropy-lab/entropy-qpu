@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "entropylab-qpudb"
-version = "0.0.1-alpha0"
+version = "0.0.3"
 description = "A extension of entropy lab for persistent storage of calibration parameters of a quantum processing unit (QPU)"
 authors = ["Lior Ella <lior@quantum-machines.co>"]
 
