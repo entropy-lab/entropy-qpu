@@ -101,6 +101,10 @@ def create_new_qpu_database(dbname, initial_data_dict, force_create=False, path=
     db_hist.close()
 
 
+class ReadOnlyError(Exception):
+    pass
+
+
 class QpuDatabaseConnectionBase(Instrument):
     def setup_driver(self):
         pass
@@ -143,13 +147,16 @@ class QpuDatabaseConnectionBase(Instrument):
         self._con_hist.transaction_manager.begin()
         hist_entries = self._con_hist.root()["entries"]
         if self._history_index is not None:
+            self._readonly = True
             message_index = self._history_index
             at = self._con_hist.root()["entries"][self._history_index]["timestamp"]
         else:
+            self._readonly = False
             message_index = len(hist_entries) - 1
             at = None
         db = ZODB.DB(dbfilename)
         self._con = db.open(transaction_manager=transaction.TransactionManager(), at=at)
+        assert self._con.isReadOnly() == self._readonly, "internal error: Inconsistent readonly state"
         self._con.transaction_manager.begin()
         print(
             f"opening qpu database {dbname} from "
@@ -158,6 +165,10 @@ class QpuDatabaseConnectionBase(Instrument):
 
     def __enter__(self):
         return self
+
+    @property
+    def readonly(self):
+        return self._readonly
 
     def close(self):
         print(f"closing qpu database {self._dbname}")
@@ -182,11 +193,11 @@ class QpuDatabaseConnectionBase(Instrument):
         root["elements"][element][attribute].cal_state = new_cal_state
 
     def add_attribute(
-        self,
-        element: str,
-        attribute: str,
-        value: Any = None,
-        new_cal_state: Optional[CalState] = None,
+            self,
+            element: str,
+            attribute: str,
+            value: Any = None,
+            new_cal_state: Optional[CalState] = None,
     ) -> None:
         """
         Adds an attribute to an existing element.
@@ -235,6 +246,8 @@ class QpuDatabaseConnectionBase(Instrument):
         Permanently store the existing state to the DB and add a new commit to the history list
         :param message: an optional message for the commit
         """
+        if self._readonly:
+            raise ReadOnlyError("Attempting to commit to a DB in a readonly state")
         self._con.transaction_manager.commit()
         hist_root = self._con_hist.root()
         hist_entries = hist_root["entries"]

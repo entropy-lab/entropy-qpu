@@ -4,6 +4,7 @@ from glob import glob
 from time import sleep
 
 import pytest
+from persistent.timestamp import _parseRaw
 from quaentropy.instruments.lab_topology import LabResources, ExperimentResources
 from quaentropy.results_backend.sqlalchemy.db import SqlAlchemyDB
 
@@ -11,7 +12,7 @@ from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
     QpuDatabaseConnectionBase,
     create_new_qpu_database,
-    QpuParameter,
+    QpuParameter, ReadOnlyError,
 )
 
 
@@ -162,6 +163,29 @@ def test_set_with_commit_history(testdb):
 
     with QpuDatabaseConnection(testdb, simp_resolver) as db:
         print(db.get_history())
+
+
+def test_fail_on_commit_to_readonly(testdb):
+    with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        print()
+        db.set("q2", "p1", 11.0)
+        print(db.get("q2", "p1"))
+        db.commit("my first commit")
+
+    sleep(0.5)
+
+    # open historical connection
+
+    # should fail when DB is modified
+    with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
+        db.set('q1', 'p1', 444)
+        with pytest.raises(ReadOnlyError):
+            db.commit('trying')
+
+    # should fail when DB is not modified
+    with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
+        with pytest.raises(ReadOnlyError):
+            db.commit('trying')
 
 
 def test_print(testdb):
