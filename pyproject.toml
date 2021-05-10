@@ -1,8 +1,19 @@
 [tool.poetry]
 name = "entropylab-qpudb"
-version = "0.0.3"
+version = "0.0.0"
 description = "A extension of entropy lab for persistent storage of calibration parameters of a quantum processing unit (QPU)"
 authors = ["Lior Ella <lior@quantum-machines.co>"]
+license = "BSD-3-Clause"
+packages = [
+    { include = "entropylab_qpudb" }
+]
+include = [
+]
+exclude = [
+    "**/tests/**",
+]
+readme = "README.md"
+homepage = "https://github.com/entropy-lab/entropy-qpu"
 
 [tool.poetry.dependencies]
 python = "^3.7.1"

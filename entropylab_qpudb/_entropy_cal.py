@@ -7,9 +7,9 @@ from itertools import count
 from typing import Callable, List, Optional, Union, Iterable, Set
 
 from entropylab_qpudb._quaconfig import QuaConfig
-from quaentropy.api.execution import EntropyContext
-from quaentropy.api.graph import Node
-from quaentropy.graph_experiment import PyNode
+from entropylab.api.execution import EntropyContext
+from entropylab.api.graph import Node
+from entropylab.graph_experiment import PyNode
 
 
 class AncestorRunStrategy(enum.Enum):

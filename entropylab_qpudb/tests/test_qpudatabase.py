@@ -4,15 +4,16 @@ from glob import glob
 from time import sleep
 
 import pytest
+from entropylab.instruments.lab_topology import LabResources, ExperimentResources
+from entropylab.results_backend.sqlalchemy.db import SqlAlchemyDB
 from persistent.timestamp import _parseRaw
-from quaentropy.instruments.lab_topology import LabResources, ExperimentResources
-from quaentropy.results_backend.sqlalchemy.db import SqlAlchemyDB
 
 from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
     QpuDatabaseConnectionBase,
     create_new_qpu_database,
-    QpuParameter, ReadOnlyError,
+    QpuParameter,
+    ReadOnlyError,
 )
 
 
@@ -36,18 +37,19 @@ def testdb():
         os.remove(fl)
 
 
+class SResolver(Resolver):
+    def q(self, qubit, channel=None):
+        return f"q{qubit}"
+
+    def res(self, resonator):
+        return f"res{resonator}"
+
+    def coupler(self, qubit1, qubit2):
+        return f"c{qubit1}{qubit2}"
+
+
 @pytest.fixture
 def simp_resolver():
-    class SResolver(Resolver):
-        def q(self, qubit, channel=None):
-            return f"q{qubit}"
-
-        def res(self, resonator):
-            return f"res{resonator}"
-
-        def coupler(self, qubit1, qubit2):
-            return f"c{qubit1}{qubit2}"
-
     return SResolver()
 
 
@@ -183,14 +185,14 @@ def test_fail_on_commit_to_readonly(testdb):
 
     # should fail when DB is modified
     with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
-        db.set('q1', 'p1', 444)
+        db.set("q1", "p1", 444)
         with pytest.raises(ReadOnlyError):
-            db.commit('trying')
+            db.commit("trying")
 
     # should fail when DB is not modified
     with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
         with pytest.raises(ReadOnlyError):
-            db.commit('trying')
+            db.commit("trying")
 
 
 def test_commit_unmodified(testdb):
