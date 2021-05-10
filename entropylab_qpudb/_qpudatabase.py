@@ -14,7 +14,7 @@ import transaction
 from persistent import Persistent
 from persistent.list import PersistentList
 from persistent.mapping import PersistentMapping
-from quaentropy.instruments.instrument_driver import Instrument
+from entropylab.instruments.instrument_driver import Resource
 
 
 class CalState(Enum):
@@ -106,11 +106,12 @@ class ReadOnlyError(Exception):
     pass
 
 
-class QpuDatabaseConnectionBase(Instrument):
-    def setup_driver(self):
+class QpuDatabaseConnectionBase(Resource):
+
+    def connect(self):
         pass
 
-    def teardown_driver(self):
+    def teardown(self):
         self.close()
 
     def revert_to_snapshot(self, snapshot: str):

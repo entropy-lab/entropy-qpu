@@ -4,9 +4,9 @@ from glob import glob
 from time import sleep
 
 import pytest
+from entropylab.instruments.lab_topology import LabResources, ExperimentResources
+from entropylab.results_backend.sqlalchemy.db import SqlAlchemyDB
 from persistent.timestamp import _parseRaw
-from quaentropy.instruments.lab_topology import LabResources, ExperimentResources
-from quaentropy.results_backend.sqlalchemy.db import SqlAlchemyDB
 
 from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
@@ -36,18 +36,19 @@ def testdb():
         os.remove(fl)
 
 
+class SResolver(Resolver):
+    def q(self, qubit, channel=None):
+        return f"q{qubit}"
+
+    def res(self, resonator):
+        return f"res{resonator}"
+
+    def coupler(self, qubit1, qubit2):
+        return f"c{qubit1}{qubit2}"
+
+
 @pytest.fixture
 def simp_resolver():
-    class SResolver(Resolver):
-        def q(self, qubit, channel=None):
-            return f"q{qubit}"
-
-        def res(self, resonator):
-            return f"res{resonator}"
-
-        def coupler(self, qubit1, qubit2):
-            return f"c{qubit1}{qubit2}"
-
     return SResolver()
 
 
