@@ -107,7 +107,6 @@ class ReadOnlyError(Exception):
 
 
 class QpuDatabaseConnectionBase(Resource):
-
     def connect(self):
         pass
 
@@ -158,7 +157,9 @@ class QpuDatabaseConnectionBase(Resource):
             at = None
         self._db = ZODB.DB(dbfilename) if self._db is None else self._db
         con = self._db.open(transaction_manager=transaction.TransactionManager(), at=at)
-        assert con.isReadOnly() == readonly, "internal error: Inconsistent readonly state"
+        assert (
+            con.isReadOnly() == readonly
+        ), "internal error: Inconsistent readonly state"
         con.transaction_manager.begin()
         print(
             f"opening qpu database {self._dbname} from "
@@ -169,9 +170,7 @@ class QpuDatabaseConnectionBase(Resource):
     def open_hist_db(self):
         histfilename = _hist_file_from_path(self._path, self._dbname)
         db_hist = ZODB.DB(histfilename)
-        con_hist = db_hist.open(
-            transaction_manager=transaction.TransactionManager()
-        )
+        con_hist = db_hist.open(transaction_manager=transaction.TransactionManager())
         con_hist.transaction_manager.begin()
         return con_hist
 
@@ -205,11 +204,11 @@ class QpuDatabaseConnectionBase(Resource):
         root["elements"][element][attribute].cal_state = new_cal_state
 
     def add_attribute(
-            self,
-            element: str,
-            attribute: str,
-            value: Any = None,
-            new_cal_state: Optional[CalState] = None,
+        self,
+        element: str,
+        attribute: str,
+        value: Any = None,
+        new_cal_state: Optional[CalState] = None,
     ) -> None:
         """
         Adds an attribute to an existing element.
@@ -274,7 +273,7 @@ class QpuDatabaseConnectionBase(Resource):
                 f"with commit {self._str_hist_entry(hist_entries[-1])} at index {len(hist_entries) - 1}"
             )
         else:
-            print('did not commit')
+            print("did not commit")
 
     def abort(self):
         self._con.transaction_manager.abort()

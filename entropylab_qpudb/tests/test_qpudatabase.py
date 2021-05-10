@@ -12,7 +12,8 @@ from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
     QpuDatabaseConnectionBase,
     create_new_qpu_database,
-    QpuParameter, ReadOnlyError,
+    QpuParameter,
+    ReadOnlyError,
 )
 
 
@@ -184,14 +185,14 @@ def test_fail_on_commit_to_readonly(testdb):
 
     # should fail when DB is modified
     with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
-        db.set('q1', 'p1', 444)
+        db.set("q1", "p1", 444)
         with pytest.raises(ReadOnlyError):
-            db.commit('trying')
+            db.commit("trying")
 
     # should fail when DB is not modified
     with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
         with pytest.raises(ReadOnlyError):
-            db.commit('trying')
+            db.commit("trying")
 
 
 def test_commit_unmodified(testdb):
