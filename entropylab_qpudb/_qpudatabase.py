@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Type, Optional
+from typing import Any, Type, Optional, Dict
 
 import ZODB
 import ZODB.FileStorage
@@ -15,6 +15,9 @@ from persistent import Persistent
 from persistent.list import PersistentList
 from persistent.mapping import PersistentMapping
 from entropylab.instruments.instrument_driver import Resource
+from zc.lockfile import LockError
+
+from entropylab_qpudb._resolver import DefaultResolver
 
 
 class CalState(Enum):
@@ -29,6 +32,9 @@ class CalState(Enum):
 
 @dataclass(repr=False)
 class QpuParameter(Persistent):
+    """
+    A QPU parameter which stores values and modification status for QPU DB entries
+    """
     value: Any
     last_updated: datetime = None
     cal_state: CalState = CalState.UNCAL
@@ -65,7 +71,31 @@ def _hist_file_from_path(path, dbname):
     return os.path.join(path, dbname + "_history.fs")
 
 
-def create_new_qpu_database(dbname, initial_data_dict, force_create=False, path=None):
+def create_new_qpu_database(dbname: str,
+                            initial_data_dict: Dict = None,
+                            force_create: bool = False,
+                            path: str = None) -> None:
+    """
+    Create a new QPU database permanent storage file. This operation is performed once in the lifetime of a database,
+    and is quite similar to initializing a git repo.
+
+    When this method is called, DB files are generated in the working directory of the script by default. An attempt
+    to create a DB where one already exists by the same name will lead to an error, unless `force_create` flag is used.
+
+    .. note::
+
+        if the scripts that create this database are managed by a version control system such as git, it is not
+        recommended to create the DB files in the same path as the scripts, since then they will be tracked by the
+        versioning system or, if ignored, can be deleted by it.
+
+    :param dbname: The name of the database. Used when opening with `QpuDatabaseConnection`.
+    :param initial_data_dict: An initial dictionary of QPU parameters.
+    :param force_create: If set to true, calling this method when an array already exists in the folder will lead to
+    it being overridden.
+    :param path: The path where the DB is to be stored.
+    """
+    if initial_data_dict is None:
+        initial_data_dict = {}
     if path is None:
         path = os.getcwd()
     dbfilename = _db_file_from_path(path, dbname)
@@ -79,6 +109,7 @@ def create_new_qpu_database(dbname, initial_data_dict, force_create=False, path=
     # promote all attributes to QpuParams
     # todo: turn into validation schema
     # todo: assert num_qubits is in system
+    initial_data_dict = deepcopy(initial_data_dict)
     for element in initial_data_dict.keys():
         for attr in initial_data_dict[element].keys():
             parameter = initial_data_dict[element][attr]
@@ -106,7 +137,7 @@ class ReadOnlyError(Exception):
     pass
 
 
-class QpuDatabaseConnectionBase(Resource):
+class _QpuDatabaseConnectionBase(Resource):
     def connect(self):
         pass
 
@@ -141,10 +172,10 @@ class QpuDatabaseConnectionBase(Resource):
             raise FileNotFoundError(f"QPU DB {self._dbname} does not exist")
         self._db = None
         super().__init__()
-        self._con_hist = self.open_hist_db()
-        self._readonly, self._con = self.open_data_db(history_index)
+        self._con_hist = self._open_hist_db()
+        self._readonly, self._con = self._open_data_db(history_index)
 
-    def open_data_db(self, history_index):
+    def _open_data_db(self, history_index):
         dbfilename = _db_file_from_path(self._path, self._dbname)
         hist_entries = self._con_hist.root()["entries"]
         if history_index is not None:
@@ -155,10 +186,15 @@ class QpuDatabaseConnectionBase(Resource):
             readonly = False
             message_index = len(hist_entries) - 1
             at = None
-        self._db = ZODB.DB(dbfilename) if self._db is None else self._db
+        try:
+            self._db = ZODB.DB(dbfilename) if self._db is None else self._db
+        except LockError:
+            raise ConnectionError(f"attempting to open a connection to {self._dbname} but a connection already exists."
+                                  f"Try closing existing python sessions.")
+
         con = self._db.open(transaction_manager=transaction.TransactionManager(), at=at)
         assert (
-            con.isReadOnly() == readonly
+                con.isReadOnly() == readonly
         ), "internal error: Inconsistent readonly state"
         con.transaction_manager.begin()
         print(
@@ -167,9 +203,13 @@ class QpuDatabaseConnectionBase(Resource):
         )
         return readonly, con
 
-    def open_hist_db(self):
+    def _open_hist_db(self):
         histfilename = _hist_file_from_path(self._path, self._dbname)
-        db_hist = ZODB.DB(histfilename)
+        try:
+            db_hist = ZODB.DB(histfilename)
+        except LockError:
+            raise ConnectionError(f"attempting to open a connection to {self._dbname} but a connection already exists."
+                                  f"Try closing existing python sessions.")
         con_hist = db_hist.open(transaction_manager=transaction.TransactionManager())
         con_hist.transaction_manager.begin()
         return con_hist
@@ -181,7 +221,10 @@ class QpuDatabaseConnectionBase(Resource):
     def readonly(self):
         return self._readonly
 
-    def close(self):
+    def close(self) -> None:
+        """
+        Closes QPU DB connection to allow for other connections.
+        """
         print(f"closing qpu database {self._dbname}")
         self._con._db.close()
         self._con_hist._db.close()
@@ -189,26 +232,36 @@ class QpuDatabaseConnectionBase(Resource):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def set(self, element, attribute, value, new_cal_state=None):
+    def set(self, element: str, attribute: str, value: Any, new_cal_state: Optional[CalState] = None) -> None:
+        """
+        A generic function for modifying values of element attributes.
+
+        Modifies the value in memory. The modified value will persist until the connection object
+        is deleted. To store the object in memory constantly,
+        use :func:`~entropylab_qpudb._qpudatabase.QpuDatabaseConnectionBase.commit`.
+
+        :param element: The name of the element whose attribute should be modified
+        :param attribute: The name of the attribute
+        :param value: The value to modify
+        :param new_cal_state: (optional) new calibration state specification
+        """
         root = self._con.root()
         if attribute not in root["elements"][element]:
             raise AttributeError(
                 f"attribute {attribute} does not exist for element {element}"
             )
         if new_cal_state is None:
-            new_cal_state = CalState.UNCAL
-        else:
             new_cal_state = root["elements"][element][attribute].cal_state
         root["elements"][element][attribute].value = value
         root["elements"][element][attribute].last_updated = datetime.now()
         root["elements"][element][attribute].cal_state = new_cal_state
 
     def add_attribute(
-        self,
-        element: str,
-        attribute: str,
-        value: Any = None,
-        new_cal_state: Optional[CalState] = None,
+            self,
+            element: str,
+            attribute: str,
+            value: Any = None,
+            new_cal_state: Optional[CalState] = None,
     ) -> None:
         """
         Adds an attribute to an existing element.
@@ -243,6 +296,14 @@ class QpuDatabaseConnectionBase(Resource):
             root["elements"][element] = dict()
 
     def get(self, element: str, attribute: str) -> FrozenQpuParameter:
+        """
+        Get a QpuParameter object from which values, last modified and calibration can be extracted.
+
+        :param element: name of the element from which to get
+        :param attribute: name of the attribute to get
+        :return: a :class:`entropylab_qpudb._qpudatabase.FrozenQpuParameter` instance from which values and modification
+        data can be obtained
+        """
         root = self._con.root()
         if attribute not in root["elements"][element]:
             raise AttributeError(
@@ -304,18 +365,24 @@ class QpuDatabaseConnectionBase(Resource):
         restore the current unmodified and open DB data to be the same as the one from `history_index`.
         Will not commit the restored data.
 
+        .. note::
+
+            The `last_modified` values will return to the ones in the stored commit as well.
+
         :param history_index: History index from which to restore
         """
-        readonly, con = self.open_data_db(history_index)
+        readonly, con = self._open_data_db(history_index)
         self._con.root()["elements"] = deepcopy(con.root()["elements"])
         con.close()
-        print(con)
 
 
-class QpuDatabaseConnection(QpuDatabaseConnectionBase):
-    def __init__(self, dbname, resolver, **kwargs):
+class QpuDatabaseConnection(_QpuDatabaseConnectionBase):
+    def __init__(self, dbname, resolver=None, **kwargs):
         super().__init__(dbname, **kwargs)
-        self._resolver = resolver
+        if resolver is None:
+            self._resolver = DefaultResolver()
+        else:
+            self._resolver = resolver
 
     def q(self, qubit):
         element = self._resolver.q(qubit)

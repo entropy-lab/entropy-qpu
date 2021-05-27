@@ -10,7 +10,7 @@ from persistent.timestamp import _parseRaw
 
 from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
-    QpuDatabaseConnectionBase,
+    _QpuDatabaseConnectionBase,
     create_new_qpu_database,
     QpuParameter,
     ReadOnlyError,
@@ -53,13 +53,34 @@ def simp_resolver():
     return SResolver()
 
 
+def test_open_with_default_resolver(testdb):
+    with QpuDatabaseConnection(testdb) as db:
+        assert db.q(1).p1.value == 3.32
+        print(db.q(1).p1)
+        db.add_element(db._resolver.coupler(1, 2))  # todo: add methods for adding specific element types
+        db.add_attribute(db._resolver.coupler(1, 2), 'xx', 20)
+        print(db.coupler(1, 2).xx)
+        assert db.coupler(1, 2).xx.value == 20
+        assert db.coupler(2, 1).xx.value == 20
+
+
+def test_open_empty():
+    try:
+        create_new_qpu_database("ptest")
+        db = _QpuDatabaseConnectionBase("ptest")
+        db.close()
+    finally:
+        for fl in glob("ptest*"):
+            os.remove(fl)
+
+
 def test_open_from_path():
     testdict = {"q1": {"p1": 5}}
     os.mkdir("testdir")
     try:
         create_new_qpu_database("ptest", testdict, path="./testdir")
         assert os.path.exists("testdir/ptest.fs")
-        db = QpuDatabaseConnectionBase("ptest", path="testdir")
+        db = _QpuDatabaseConnectionBase("ptest", path="testdir")
         assert db.get("q1", "p1").value == 5
         db.close()
     finally:
@@ -70,11 +91,23 @@ def test_open_from_path():
 
 def test_open_without_creation():
     with pytest.raises(FileNotFoundError):
-        QpuDatabaseConnectionBase("testdb2")
+        _QpuDatabaseConnectionBase("testdb2")
+
+
+def test_open_on_existing_connection_fail(testdb):
+    db1 = _QpuDatabaseConnectionBase(testdb)
+    with pytest.raises(ConnectionError):
+        db2 = _QpuDatabaseConnectionBase(testdb)
+
+
+def test_open_on_existing_connection_succeed(testdb):
+    db1 = _QpuDatabaseConnectionBase(testdb)
+    db1.close()
+    db2 = _QpuDatabaseConnectionBase(testdb)
 
 
 def test_simple_get(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         print(db.get("q2", "p1"))
         print(db.get("q1", "p1"))
@@ -83,42 +116,62 @@ def test_simple_get(testdb):
 
 
 def test_simple_set_no_commit(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         db.set("q2", "p1", 10.0)
         print(db.get("q2", "p1"))
         assert db.get("q2", "p1").value == 10.0
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         db.get("q2", "p1")
         assert db.get("q2", "p1").value == 3.4
 
 
-def test_simple_set_with_commit(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+def test_modify_cal_state(testdb):
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
-        db.set("q2", "p1", 11.0)
+        db.set("q2", "p1", 10.0, new_cal_state=CalState.COARSE)
+        print(db.get("q2", "p1"))
+        assert db.get("q2", "p1").value == 10.0
+        assert db.get("q2", "p1").cal_state == CalState.COARSE
+
+
+def test_do_not_modify_cal_state(testdb):
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        print()
+        db.set("q2", "p1", 10.0, new_cal_state=CalState.COARSE)
+        db.set("q2", "p1", 9.0)
+        print(db.get("q2", "p1"))
+        assert db.get("q2", "p1").value == 9.0
+        assert db.get("q2", "p1").cal_state == CalState.COARSE
+
+
+def test_simple_set_with_commit(testdb):
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        print()
+        db.set("q2", "p1", 11.0, new_cal_state=CalState.FINE)
         print(db.get("q2", "p1"))
         db.commit()
         assert len(db.get_history()) == 2
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         assert len(db.get_history()) == 2
         print(db.get("q2", "p1"))
         assert db.get("q2", "p1").value == 11.0
+        assert db.get("q2", "p1").cal_state == CalState.FINE
 
 
 def test_impossible_to_set_via_get(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         with pytest.raises(FrozenInstanceError):
             db.get("q2", "p1").value = -10.0
 
 
 def test_set_with_commit_multiple(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         db.set("q2", "p1", 11.0)
         print(db.get("q2", "p1"))
@@ -126,12 +179,12 @@ def test_set_with_commit_multiple(testdb):
         db.commit()
         assert len(db.get_history()) == 2
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.set("q1", "p1", [1, 2])
         db.commit()
         assert len(db.get_history()) == 3
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         print(db.get("q2", "p1"))
         print(db.get("q1", "p1"))
@@ -226,14 +279,14 @@ def test_restore_from_history(testdb):
 
 
 def test_print(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         print()
         db.print()
         db.print("q1")
 
 
 def test_without_cm(testdb):
-    qpudb = QpuDatabaseConnectionBase(testdb)
+    qpudb = _QpuDatabaseConnectionBase(testdb)
     try:
         qpudb.set("q1", "p1", 20)
         print(qpudb.get("q1", "p1").value == 20)
@@ -243,56 +296,56 @@ def test_without_cm(testdb):
 
 def test_add_attributes(testdb):
     # todo: fix this with add function
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         with pytest.raises(AttributeError):
             db.set("q1", "p_new", 44)
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_attribute("q1", "p_new")
-        assert db.get("q1", "p_new").value == None
+        assert db.get("q1", "p_new").value is None
 
 
 def test_add_attributes_no_persistence(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_attribute("q1", "p_new", -5, CalState.FINE)
         assert db.get("q1", "p_new").value == -5
         assert db.get("q1", "p_new").cal_state == CalState.FINE
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         with pytest.raises(AttributeError):
             assert db.get("q1", "p_new").value == -5
 
 
 def test_add_attributes_persistence(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_attribute("q1", "p_new", -5, CalState.FINE)
         assert db.get("q1", "p_new").value == -5
         assert db.get("q1", "p_new").cal_state == CalState.FINE
         db.commit()
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         assert db.get("q1", "p_new").value == -5
         assert db.get("q1", "p_new").cal_state == CalState.FINE
 
 
 def test_add_elements(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_element("q_new")
         db.add_attribute("q_new", "p_new", "something")
         assert db.get("q_new", "p_new").value == "something"
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         with pytest.raises(AttributeError):
             assert db.add_element("q1")
 
 
 def test_add_elements_persistence(testdb):
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_element("q_new")
         db.add_attribute("q_new", "p_new", "something")
         db.commit()
 
-    with QpuDatabaseConnectionBase(testdb) as db:
+    with _QpuDatabaseConnectionBase(testdb) as db:
         assert db.get("q_new", "p_new").value == "something"
 
 
