@@ -132,3 +132,7 @@ dmypy.json
 .idea
 
 reports
+
+# DB files
+*.fs*
+*.db
