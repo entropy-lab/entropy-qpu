@@ -136,3 +136,4 @@ reports
 # DB files
 *.fs*
 *.db
+.vscode/
