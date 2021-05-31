@@ -57,8 +57,10 @@ def test_open_with_default_resolver(testdb):
     with QpuDatabaseConnection(testdb) as db:
         assert db.q(1).p1.value == 3.32
         print(db.q(1).p1)
-        db.add_element(db._resolver.coupler(1, 2))  # todo: add methods for adding specific element types
-        db.add_attribute(db._resolver.coupler(1, 2), 'xx', 20)
+        db.add_element(
+            db._resolver.coupler(1, 2)
+        )  # todo: add methods for adding specific element types
+        db.add_attribute(db._resolver.coupler(1, 2), "xx", 20)
         print(db.coupler(1, 2).xx)
         assert db.coupler(1, 2).xx.value == 20
         assert db.coupler(2, 1).xx.value == 20

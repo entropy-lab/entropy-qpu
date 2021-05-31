@@ -35,6 +35,7 @@ class QpuParameter(Persistent):
     """
     A QPU parameter which stores values and modification status for QPU DB entries
     """
+
     value: Any
     last_updated: datetime = None
     cal_state: CalState = CalState.UNCAL
@@ -71,10 +72,12 @@ def _hist_file_from_path(path, dbname):
     return os.path.join(path, dbname + "_history.fs")
 
 
-def create_new_qpu_database(dbname: str,
-                            initial_data_dict: Dict = None,
-                            force_create: bool = False,
-                            path: str = None) -> None:
+def create_new_qpu_database(
+    dbname: str,
+    initial_data_dict: Dict = None,
+    force_create: bool = False,
+    path: str = None,
+) -> None:
     """
     Create a new QPU database permanent storage file. This operation is performed once in the lifetime of a database,
     and is quite similar to initializing a git repo.
@@ -189,12 +192,14 @@ class _QpuDatabaseConnectionBase(Resource):
         try:
             self._db = ZODB.DB(dbfilename) if self._db is None else self._db
         except LockError:
-            raise ConnectionError(f"attempting to open a connection to {self._dbname} but a connection already exists."
-                                  f"Try closing existing python sessions.")
+            raise ConnectionError(
+                f"attempting to open a connection to {self._dbname} but a connection already exists."
+                f"Try closing existing python sessions."
+            )
 
         con = self._db.open(transaction_manager=transaction.TransactionManager(), at=at)
         assert (
-                con.isReadOnly() == readonly
+            con.isReadOnly() == readonly
         ), "internal error: Inconsistent readonly state"
         con.transaction_manager.begin()
         print(
@@ -208,8 +213,10 @@ class _QpuDatabaseConnectionBase(Resource):
         try:
             db_hist = ZODB.DB(histfilename)
         except LockError:
-            raise ConnectionError(f"attempting to open a connection to {self._dbname} but a connection already exists."
-                                  f"Try closing existing python sessions.")
+            raise ConnectionError(
+                f"attempting to open a connection to {self._dbname} but a connection already exists."
+                f"Try closing existing python sessions."
+            )
         con_hist = db_hist.open(transaction_manager=transaction.TransactionManager())
         con_hist.transaction_manager.begin()
         return con_hist
@@ -232,7 +239,13 @@ class _QpuDatabaseConnectionBase(Resource):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def set(self, element: str, attribute: str, value: Any, new_cal_state: Optional[CalState] = None) -> None:
+    def set(
+        self,
+        element: str,
+        attribute: str,
+        value: Any,
+        new_cal_state: Optional[CalState] = None,
+    ) -> None:
         """
         A generic function for modifying values of element attributes.
 
@@ -257,11 +270,11 @@ class _QpuDatabaseConnectionBase(Resource):
         root["elements"][element][attribute].cal_state = new_cal_state
 
     def add_attribute(
-            self,
-            element: str,
-            attribute: str,
-            value: Any = None,
-            new_cal_state: Optional[CalState] = None,
+        self,
+        element: str,
+        attribute: str,
+        value: Any = None,
+        new_cal_state: Optional[CalState] = None,
     ) -> None:
         """
         Adds an attribute to an existing element.
