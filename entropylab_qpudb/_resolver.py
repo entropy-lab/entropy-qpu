@@ -29,13 +29,13 @@ class Resolver(ABC):
 class DefaultResolver(Resolver):
     def q(self, qubit, channel=None):
         if channel is None:
-            return f'q{qubit}'
+            return f"q{qubit}"
         else:
-            return f'q{qubit}_{channel}'
+            return f"q{qubit}_{channel}"
 
     def res(self, resonator):
-        return f'res{resonator}'
+        return f"res{resonator}"
 
     def coupler(self, qubit1, qubit2):
         qubit1, qubit2 = sorted((qubit1, qubit2))
-        return f'c{qubit1}_{qubit2}'
+        return f"c{qubit1}_{qubit2}"
