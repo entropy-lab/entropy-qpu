@@ -130,7 +130,13 @@ def create_new_qpu_database(
     connection_hist = db_hist.open()
     root_hist = connection_hist.root()
     root_hist["entries"] = PersistentList(
-        [{"timestamp": datetime.utcnow(), "message": "initial commit"}]
+        [
+            {
+                "timestamp": datetime.utcnow(),
+                "connected_tx": None,
+                "message": "initial commit",
+            }
+        ]
     )
     transaction.commit()
     db_hist.close()
@@ -176,17 +182,15 @@ class _QpuDatabaseConnectionBase(Resource):
         self._db = None
         super().__init__()
         self._con_hist = self._open_hist_db()
-        self._readonly, self._con = self._open_data_db(history_index)
+        self._con = self._open_data_db(history_index)
 
     def _open_data_db(self, history_index):
         dbfilename = _db_file_from_path(self._path, self._dbname)
         hist_entries = self._con_hist.root()["entries"]
         if history_index is not None:
-            readonly = True
             message_index = history_index
-            at = self._con_hist.root()["entries"][history_index]["timestamp"]
+            at = self._con_hist.root()["entries"][history_index]["connected_tx"]
         else:
-            readonly = False
             message_index = len(hist_entries) - 1
             at = None
         try:
@@ -198,15 +202,12 @@ class _QpuDatabaseConnectionBase(Resource):
             )
 
         con = self._db.open(transaction_manager=transaction.TransactionManager(), at=at)
-        assert (
-            con.isReadOnly() == readonly
-        ), "internal error: Inconsistent readonly state"
         con.transaction_manager.begin()
         print(
             f"opening qpu database {self._dbname} from "
             f"commit {self._str_hist_entry(hist_entries[message_index])} at index {message_index}"
         )
-        return readonly, con
+        return con
 
     def _open_hist_db(self):
         histfilename = _hist_file_from_path(self._path, self._dbname)
@@ -226,7 +227,7 @@ class _QpuDatabaseConnectionBase(Resource):
 
     @property
     def readonly(self):
-        return self._readonly
+        return self._con.isReadOnly()
 
     def close(self) -> None:
         """
@@ -331,7 +332,7 @@ class _QpuDatabaseConnectionBase(Resource):
         Permanently store the existing state to the DB and add a new commit to the history list
         :param message: an optional message for the commit
         """
-        if self._readonly:
+        if self.readonly:
             raise ReadOnlyError("Attempting to commit to a DB in a readonly state")
         lt_before = self._con._db.lastTransaction()
         self._con.transaction_manager.commit()
@@ -340,7 +341,9 @@ class _QpuDatabaseConnectionBase(Resource):
             hist_root = self._con_hist.root()
             hist_entries = hist_root["entries"]
             now = datetime.utcnow()
-            hist_entries.append({"timestamp": now, "message": message})
+            hist_entries.append(
+                {"timestamp": now, "connected_tx": lt_after, "message": message}
+            )
             self._con_hist.transaction_manager.commit()
             print(
                 f"commiting qpu database {self._dbname} "
@@ -384,7 +387,7 @@ class _QpuDatabaseConnectionBase(Resource):
 
         :param history_index: History index from which to restore
         """
-        readonly, con = self._open_data_db(history_index)
+        con = self._open_data_db(history_index)
         self._con.root()["elements"] = deepcopy(con.root()["elements"])
         con.close()
 

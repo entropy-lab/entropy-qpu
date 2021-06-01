@@ -239,13 +239,13 @@ def test_fail_on_commit_to_readonly(testdb):
     # open historical connection
 
     # should fail when DB is modified
-    with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
+    with QpuDatabaseConnection(testdb, simp_resolver, history_index=1) as db:
         db.set("q1", "p1", 444)
         with pytest.raises(ReadOnlyError):
             db.commit("trying")
 
     # should fail when DB is not modified
-    with QpuDatabaseConnection(testdb, simp_resolver, history_index=0) as db:
+    with QpuDatabaseConnection(testdb, simp_resolver, history_index=1) as db:
         with pytest.raises(ReadOnlyError):
             db.commit("trying")
 
@@ -262,15 +262,17 @@ def test_commit_unmodified(testdb):
 
 def test_restore_from_history(testdb):
     with QpuDatabaseConnection(testdb, simp_resolver) as db:
+        db.set("q2", "p1", 3.4)
+        db.commit("my first commit")
         print()
         db.set("q2", "p1", 11.0)
         print(db.get("q2", "p1"))
-        db.commit("my first commit")
+        db.commit("my second commit")
 
     with QpuDatabaseConnection(testdb, simp_resolver) as db:
         print()
         assert db.get("q2", "p1").value == 11.0
-        db.restore_from_history(0)
+        db.restore_from_history(1)
         print(db.get("q2", "p1"))
         assert db.get("q2", "p1").value == 3.4
 
@@ -381,3 +383,46 @@ def test_use_in_entropy(testdb, simp_resolver):
         experiment_resources.get_resource(testdb).close()
     finally:
         os.remove("entropy.db")
+
+
+def test_we_can_open_all_history_items(testdb):
+    indices = []
+    expected_values = []
+    actual_values = []
+
+    # prepare the database with items in the history
+    with QpuDatabaseConnection(testdb) as db:
+        for v_bias in range(6):
+            db.set("q1", "p1", v_bias)
+            db.commit()
+            indices.append(len(db._con_hist.root()["entries"]) - 1)
+            expected_values.append(db.q(1).p1.value)
+
+    # try to pull an item from all history entries
+    with QpuDatabaseConnection(testdb) as db:
+        for i in indices:
+            db.restore_from_history(i)
+            actual_values.append(db.q(1).p1.value)
+
+    assert expected_values == actual_values
+
+
+def test_we_can_open_all_history_items_in_same_connection(testdb):
+    indices = []
+    expected_values = []
+    actual_values = []
+
+    # prepare the database with items in the history
+    with QpuDatabaseConnection(testdb) as db:
+        for v_bias in range(6):
+            db.set("q1", "p1", v_bias)
+            db.commit()
+            indices.append(len(db._con_hist.root()["entries"]) - 1)
+            expected_values.append(db.q(1).p1.value)
+
+        # try to pull an item from all history entries
+        for i in indices:
+            db.restore_from_history(i)
+            actual_values.append(db.q(1).p1.value)
+
+    assert expected_values == actual_values
