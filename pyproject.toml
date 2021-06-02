@@ -2,7 +2,11 @@
 name = "entropylab-qpudb"
 version = "0.0.0"
 description = "A extension of entropy lab for persistent storage of calibration parameters of a quantum processing unit (QPU)."
-authors = ["Lior Ella <lior@quantum-machines.co>"]
+authors = [
+    "Lior Ella <lior@quantum-machines.co>",
+    "Guy Kerem <guy@quantum-machines.co>",
+    "Tal Shani <tal@quantum-machines.co>"
+]
 license = "BSD-3-Clause"
 packages = [
     { include = "entropylab_qpudb" }
@@ -19,6 +23,7 @@ homepage = "https://github.com/entropy-lab/entropy-qpu"
 python = "^3.7.1"
 ZODB = "^5.6.0"
 pandas = "^1.2.4"
+entropylab = "^0.1.1"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"
@@ -35,8 +40,8 @@ target-version = ["py37"]
 format = "black ."
 check_format = "black --check ."
 lint = "flake8"
-test = "pytest --junitxml=reports/junit/report.xml --cov=reports/cov --cov-report=xml"
-check = ["check_format", "lint"]#, "test"]
+test = "pytest --junitxml=reports/junit/report.xml --cov=entropylab_qpudb --cov-report=xml"
+check = ["check_format", "lint", "test"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
