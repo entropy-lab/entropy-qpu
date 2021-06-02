@@ -4,7 +4,7 @@ jobs:
   build-n-test:
     env:
       POETRY_CACHE_FOLDER: '/home/runner/.cache/pypoetry/virtualenvs'
-      JUNIT_REPORT_PATH: pytest-junit-report
+      JUNIT_REPORT_PATH: reports/junit
     runs-on: ubuntu-20.04    
     steps:
       - uses: actions/checkout@v2
@@ -28,7 +28,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: pytest-report
-          path: reports/junit
+          path: ${{env.JUNIT_REPORT_PATH}}
       - id: collect-pytest-cov-reports
         if: always()
         uses: actions/upload-artifact@v2
