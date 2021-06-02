@@ -29,6 +29,14 @@ jobs:
         with:
           name: pytest-report
           path: ${{env.JUNIT_REPORT_PATH}}
+      - uses: codecov/codecov-action@v1
+        name: Upload coverage to codecov
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
+          verbose: true
       - id: collect-pytest-cov-reports
         if: always()
         uses: actions/upload-artifact@v2
