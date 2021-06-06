@@ -66,6 +66,7 @@ class QuaCalNode(PyNode):
         dependency: Optional[Union[Node, Iterable[Node]]] = None,
         must_run_after: Set[Node] = None,
         name: Optional[str] = None,
+        save_results: bool = True
     ):
         if dependency:
             if isinstance(dependency, Iterable):
@@ -111,7 +112,7 @@ class QuaCalNode(PyNode):
 
         if name is None:
             name = self.__class__.__name__
-        super().__init__(name, program, input_vars, output_vars, must_run_after)
+        super().__init__(name, program, input_vars, output_vars, must_run_after, save_results)
 
     def add_config_dependency(self, node):
         super().add_input(f"config_{node.label}", node.outputs["config"])
