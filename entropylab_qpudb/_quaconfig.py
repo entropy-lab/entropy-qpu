@@ -1,6 +1,7 @@
 from collections import UserDict as _UserDict
 from copy import deepcopy as _deepcopy
 import json as _json
+from typing import Union, Tuple, List
 
 
 class QuaConfig(_UserDict):
@@ -75,7 +76,15 @@ class QuaConfig(_UserDict):
         with open("config.json", "w") as fp:
             _json.dump(self.data, fp)
 
-    def get_waveforms_from_op(self, element, operation):
+    def get_waveforms_from_op(self, element: str, operation: str) -> Union[Tuple[List[float], List[float]], List[float]]:
+        """
+        Get output waveforms associated with an operation on a quantum element.
+        For both arbitrary and constant pulses, the waveform returned will be the actual values played.
+
+        :param element: Name of the element
+        :param operation: Name of the operation
+        :return: Either a waveform entries list if element is of type singleInput, or a tuple of waveform entries list if element is of type mixedInputs.
+        """
         pulse = self.get_pulse_from_op(element, operation)
         if "mixInputs" in self.data["elements"][element]:
             waveform_i = self.data["waveforms"][pulse["waveforms"]["I"]]
@@ -133,14 +142,18 @@ class QuaConfig(_UserDict):
 
     def update_op_amp(self, element, operation, amp):
         pulse = self.get_pulse_from_op(element, operation)
-        try:
-            self.data["waveforms"][pulse["waveforms"]["single"]]["sample"] = amp
-        except KeyError:
+        if "sample" not in self.data["waveforms"][pulse["waveforms"]["single"]]:
             raise KeyError(
                 "Can only access amplitude for a constant pulse of a single element"
             )
+        else:
+            self.data["waveforms"][pulse["waveforms"]["single"]]["sample"] = amp
 
     def get_op_amp(self, element, operation):
+        """
+        DEPRECATED - DO NOT USE
+        use `get_waveforms_from_op` instead
+        """
         pulse = self.get_pulse_from_op(element, operation)
         try:
             return self.data["waveforms"][pulse["waveforms"]["single"]]["sample"]
@@ -148,3 +161,33 @@ class QuaConfig(_UserDict):
             raise KeyError(
                 "Can only access amplitude for a constant pulse of a single element"
             )
+
+    def get_port_by_element(self, element: str, port: str) -> Tuple[str, int]:
+        """
+        returns the ports of a quantum element.
+        :param element: Name of the element
+        :param port: Name of the port. Can be either 'single' if element has `singleInput` or 'I', 'Q' if element has mixed inputs.
+        :return: a tuple of the form (con_name, port number)
+        """
+        element_data = self.data["elements"][element]
+        if port == 'single':
+            if "singleInput" in element_data:
+                return element_data["singleInput"]["port"]
+            else:
+                raise ValueError("can only use 'single' for a singleInput quantum element")
+        if "mixInputs" in element_data:
+            if port == "I" or port == "Q":
+                return element_data["mixInputs"][port]
+            else:
+                raise ValueError("can only use 'I' or 'Q' for a mixInputs quantum element")
+
+    def set_output_dc_offset_by_element(self, element: str, port: str, offset: float) -> None:
+        """
+        Set a DC offset value by element
+
+        :param element: Name of the element
+        :param port: Name of the port. Can be either 'single' if element has `singleInput` or 'I', 'Q' if element has mixed inputs.
+        :param offset: offset value to set
+        """
+        port = self.get_port_by_element(element, port)
+        self.data["controllers"][port[0]]["analog_outputs"][port[1]]["offset"] = offset
