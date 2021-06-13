@@ -76,7 +76,9 @@ class QuaConfig(_UserDict):
         with open("config.json", "w") as fp:
             _json.dump(self.data, fp)
 
-    def get_waveforms_from_op(self, element: str, operation: str) -> Union[Tuple[List[float], List[float]], List[float]]:
+    def get_waveforms_from_op(
+        self, element: str, operation: str
+    ) -> Union[Tuple[List[float], List[float]], List[float]]:
         """
         Get output waveforms associated with an operation on a quantum element.
         For both arbitrary and constant pulses, the waveform returned will be the actual values played.
@@ -162,26 +164,41 @@ class QuaConfig(_UserDict):
                 "Can only access amplitude for a constant pulse of a single element"
             )
 
-    def get_port_by_element(self, element: str, port: str) -> Tuple[str, int]:
+    def get_port_by_element_input(
+        self, element: str, element_input: str
+    ) -> Tuple[str, int]:
         """
         returns the ports of a quantum element.
         :param element: Name of the element
-        :param port: Name of the port. Can be either 'single' if element has `singleInput` or 'I', 'Q' if element has mixed inputs.
+        :param element_input:
+            Name of the element port. Can be either 'single' if element has `singleInput`
+            or 'I', 'Q' if element has mixed inputs.
         :return: a tuple of the form (con_name, port number)
         """
         element_data = self.data["elements"][element]
-        if port == 'single':
+        if element_input == "single":
             if "singleInput" in element_data:
                 return element_data["singleInput"]["port"]
             else:
-                raise ValueError("can only use 'single' for a singleInput quantum element")
+                raise ValueError(
+                    "can only use 'single' for a singleInput quantum element"
+                )
         if "mixInputs" in element_data:
-            if port == "I" or port == "Q":
-                return element_data["mixInputs"][port]
+            if element_input == "I" or element_input == "Q":
+                return element_data["mixInputs"][element_input]
             else:
-                raise ValueError("can only use 'I' or 'Q' for a mixInputs quantum element")
+                raise ValueError(
+                    "can only use 'I' or 'Q' for a mixInputs quantum element"
+                )
+        else:
+            raise ValueError(
+                f"element input is {element_input} but can only be I, Q for mixInputs or "
+                f"single for singleInput"
+            )
 
-    def set_output_dc_offset_by_element(self, element: str, port: str, offset: float) -> None:
+    def set_output_dc_offset_by_element(
+        self, element: str, port: str, offset: float
+    ) -> None:
         """
         Set a DC offset value by element
 
@@ -189,5 +206,8 @@ class QuaConfig(_UserDict):
         :param port: Name of the port. Can be either 'single' if element has `singleInput` or 'I', 'Q' if element has mixed inputs.
         :param offset: offset value to set
         """
-        port = self.get_port_by_element(element, port)
-        self.data["controllers"][port[0]]["analog_outputs"][port[1]]["offset"] = offset
+        con, port = self.get_port_by_element_input(element, port)
+        if port in self.data["controllers"][con]["analog_outputs"]:
+            self.data["controllers"][con]["analog_outputs"][port]["offset"] = offset
+        else:
+            self.data["controllers"][con]["analog_outputs"][port] = {"offset": offset}
