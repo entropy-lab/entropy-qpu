@@ -2,66 +2,22 @@ import dataclasses
 import json
 import os
 from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum, auto
 from typing import Any, Type, Optional, Dict
 
 import ZODB
 import ZODB.FileStorage
 import pandas as pd
 import transaction
-from persistent import Persistent
+from entropylab.instruments.instrument_driver import Resource
 from persistent.list import PersistentList
 from persistent.mapping import PersistentMapping
-from entropylab.instruments.instrument_driver import Resource
 from zc.lockfile import LockError
 
+from entropylab_qpudb._qpudb_basedefs import QpuParameter, FrozenQpuParameter, CalState
+
+from entropylab_qpudb._qpueditor import QpuEditor, JsonEditor
 from entropylab_qpudb._resolver import DefaultResolver
-
-
-class CalState(Enum):
-    UNCAL = auto()
-    COARSE = auto()
-    MED = auto()
-    FINE = auto()
-
-    def __str__(self):
-        return self.name
-
-
-@dataclass(repr=False)
-class QpuParameter(Persistent):
-    """
-    A QPU parameter which stores values and modification status for QPU DB entries
-    """
-
-    value: Any
-    last_updated: datetime = None
-    cal_state: CalState = CalState.UNCAL
-
-    def __post_init__(self):
-        if self.last_updated is None:
-            self.last_updated = datetime.now()
-
-    def __repr__(self):
-        if self.value is None:
-            return "QpuParameter(None)"
-        else:
-            return (
-                f"QpuParameter(value={self.value}, "
-                f"last updated: {self.last_updated.strftime('%m/%d/%Y %H:%M:%S')}, "
-                f"calibration state: {self.cal_state})"
-            )
-
-
-FrozenQpuParameter = dataclasses.make_dataclass(
-    "FrozenQpuParameter",
-    [fld.name for fld in dataclasses.fields(QpuParameter)],
-    frozen=True,
-)
-
-FrozenQpuParameter.__repr__ = QpuParameter.__repr__
 
 
 def _db_file_from_path(path, dbname):
@@ -391,10 +347,35 @@ class _QpuDatabaseConnectionBase(Resource):
         self._con.root()["elements"] = deepcopy(con.root()["elements"])
         con.close()
 
+    @property
+    def elements(self):
+        return self._con.root()["elements"].keys()
 
-class QpuDatabaseConnection(_QpuDatabaseConnectionBase):
-    def __init__(self, dbname, resolver=None, **kwargs):
+    def attributes(self, element):
+        return self._con.root()["elements"][element].keys()
+
+
+class _QpuDatabaseConnectionEditor(_QpuDatabaseConnectionBase):
+    """
+    A class for syncing with editor (observer) by writing to it every time we do set or
+    open a connection
+    and reading from it every time we do sync with editor
+    """
+
+    def __init__(self, dbname, editor: QpuEditor, **kwargs):
         super().__init__(dbname, **kwargs)
+        self._editor = editor
+
+    def push_to_editor(self):
+        self._editor.write(self)
+
+    def pull_from_editor(self):
+        self._editor.read(self)
+
+
+class QpuDatabaseConnection(_QpuDatabaseConnectionEditor):
+    def __init__(self, dbname, resolver=None, **kwargs):
+        super().__init__(dbname, editor=JsonEditor(dbname), **kwargs)
         if resolver is None:
             self._resolver = DefaultResolver()
         else:

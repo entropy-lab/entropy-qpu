@@ -12,14 +12,17 @@ from entropylab_qpudb import Resolver, QpuDatabaseConnection, CalState
 from entropylab_qpudb._qpudatabase import (
     _QpuDatabaseConnectionBase,
     create_new_qpu_database,
-    QpuParameter,
     ReadOnlyError,
 )
+from entropylab_qpudb._qpudb_basedefs import QpuParameter
 
 
 class AClass:
     def __init__(self):
         self.a = 3
+
+    def __eq__(self, other):
+        return self.a == other.a
 
 
 @pytest.fixture(scope="function")
@@ -426,3 +429,55 @@ def test_we_can_open_all_history_items_in_same_connection(testdb):
             actual_values.append(db.q(1).p1.value)
 
     assert expected_values == actual_values
+
+
+def test_write_to_json_editor(testdb):
+    with QpuDatabaseConnection(testdb) as db:
+        db.push_to_editor()
+
+        import jsonpickle
+
+        with open(testdb + ".json") as fl:
+            db_dict = jsonpickle.decode(fl.read())
+        for element in db.elements:
+            for attribute in db.attributes(element):
+                param = db.get(element, attribute)
+                entry = tuple(jsonpickle.decode(db_dict[element][attribute]))
+                saved_value, saved_cal_state = entry
+                assert param.value == saved_value
+                assert param.cal_state == saved_cal_state
+
+
+def test_read_from_json_editor(testdb):
+    with QpuDatabaseConnection(testdb) as db:
+        db.push_to_editor()
+
+    with QpuDatabaseConnection(testdb) as db:
+        db.pull_from_editor()
+        import jsonpickle
+
+        with open(testdb + ".json") as fl:
+            db_dict = jsonpickle.decode(fl.read())
+        for element in db.elements:
+            for attribute in db.attributes(element):
+                param = db.get(element, attribute)
+                entry = tuple(jsonpickle.decode(db_dict[element][attribute]))
+                saved_value, saved_cal_state = entry
+                assert param.value == saved_value
+                assert param.cal_state == saved_cal_state
+
+
+def test_edit_in_editor(testdb):
+    with QpuDatabaseConnection(testdb) as db:
+        db.push_to_editor()
+
+    with open(testdb + ".json", "r") as fl:
+        s = fl.read()
+    s = s.replace("3.32", "6.32")
+
+    with open(testdb + ".json", "w") as fl:
+        fl.write(s)
+
+    with QpuDatabaseConnection(testdb) as db:
+        db.pull_from_editor()
+        assert db.get("q1", "p1").value == 6.32
