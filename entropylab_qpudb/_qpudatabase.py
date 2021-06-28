@@ -366,10 +366,24 @@ class _QpuDatabaseConnectionEditor(_QpuDatabaseConnectionBase):
         super().__init__(dbname, **kwargs)
         self._editor = editor
 
-    def push_to_editor(self):
+    def export_to_editor(self) -> None:
+        """
+        exports the contents of the DB to an external editor, where it can be edited manually.
+        The contents can then be re-imported by calling `import_to_editor`.
+        :return: None
+        """
         self._editor.write(self)
 
-    def pull_from_editor(self):
+    def import_from_editor(self) -> None:
+        """
+        syncs the database with an editor file that was previously created, usually by calling
+        `export_to_editor`.
+        The editor file can be edited manually.
+
+        .. note::
+            No validation is performed on the manually edited data.
+        :return: None
+        """
         self._editor.read(self)
 
 

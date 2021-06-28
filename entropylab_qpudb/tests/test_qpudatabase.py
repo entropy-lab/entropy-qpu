@@ -433,7 +433,7 @@ def test_we_can_open_all_history_items_in_same_connection(testdb):
 
 def test_write_to_json_editor(testdb):
     with QpuDatabaseConnection(testdb) as db:
-        db.push_to_editor()
+        db.export_to_editor()
 
         import jsonpickle
 
@@ -450,10 +450,10 @@ def test_write_to_json_editor(testdb):
 
 def test_read_from_json_editor(testdb):
     with QpuDatabaseConnection(testdb) as db:
-        db.push_to_editor()
+        db.export_to_editor()
 
     with QpuDatabaseConnection(testdb) as db:
-        db.pull_from_editor()
+        db.import_from_editor()
         import jsonpickle
 
         with open(testdb + ".json") as fl:
@@ -469,7 +469,7 @@ def test_read_from_json_editor(testdb):
 
 def test_edit_in_editor(testdb):
     with QpuDatabaseConnection(testdb) as db:
-        db.push_to_editor()
+        db.export_to_editor()
 
     with open(testdb + ".json", "r") as fl:
         s = fl.read()
@@ -479,5 +479,5 @@ def test_edit_in_editor(testdb):
         fl.write(s)
 
     with QpuDatabaseConnection(testdb) as db:
-        db.pull_from_editor()
+        db.import_from_editor()
         assert db.get("q1", "p1").value == 6.32
