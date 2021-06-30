@@ -141,6 +141,7 @@ class QuaConfig(_UserDict):
             self.data["mixers"][mixer][found_entry_index][
                 "intermediate_frequency"
             ] = new_if
+        self.data["elements"][element]["intermediate_frequency"] = new_if
 
     def update_op_amp(self, element, operation, amp):
         pulse = self.get_pulse_from_op(element, operation)
