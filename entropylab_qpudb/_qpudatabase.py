@@ -306,7 +306,7 @@ class _QpuDatabaseConnectionBase(Resource):
                 f"with commit {self._str_hist_entry(hist_entries[-1])} at index {len(hist_entries) - 1}"
             )
         else:
-            print("did not commit")
+            print("No transactions took place, skipping commit.")
 
     def abort(self):
         self._con.transaction_manager.abort()
