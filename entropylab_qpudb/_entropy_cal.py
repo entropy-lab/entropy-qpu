@@ -4,12 +4,13 @@ from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 from itertools import count
-from typing import Callable, List, Optional, Union, Iterable, Set
+from typing import Callable, List, Optional, Union, Iterable, Set, Dict, Any
 
-from entropylab_qpudb._quaconfig import QuaConfig
 from entropylab.api.execution import EntropyContext
 from entropylab.api.graph import Node
 from entropylab.graph_experiment import PyNode
+
+from entropylab_qpudb._quaconfig import QuaConfig
 
 
 class AncestorRunStrategy(enum.Enum):
@@ -142,12 +143,34 @@ class QuaCalNode(PyNode):
 
     @abstractmethod
     def prepare_config(self, config: QuaConfig, context: EntropyContext):
+        """
+            Gets a config, and modify it in place (modifies the QuaConfig object)
+            with necessary changes for the node execution
+        :param config:
+        :param context:
+        """
         pass
 
     @abstractmethod
     def run_program(self, config, context: EntropyContext):
+        """
+            defines the node program/measurement.
+            If AncestorRunStrategy.RunOnlyLast is used, only the program
+            of the last node will be executed.
+        :param config:
+        :param context:
+        """
         pass
 
     @abstractmethod
     def update_config(self, config: QuaConfig, context: EntropyContext):
+        """
+            Updates the config with needed changes in place
+            (modifies the QuaConfig object)
+            Changes here will affect the following nodes.
+        :param config:
+        :param context:
+        """
+        pass
+
         pass
