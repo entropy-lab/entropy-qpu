@@ -297,11 +297,7 @@ class _QpuDatabaseConnectionBase(Resource):
             )
             root["elements"]._p_changed = True
 
-    def remove_attribute(
-        self,
-        element: str,
-        attribute: str
-    ) -> None:
+    def remove_attribute(self, element: str, attribute: str) -> None:
         """
         remove an existing attribute.
 
