@@ -297,6 +297,27 @@ class _QpuDatabaseConnectionBase(Resource):
             )
             root["elements"]._p_changed = True
 
+    def remove_attribute(
+        self,
+        element: str,
+        attribute: str
+    ) -> None:
+        """
+        remove an existing attribute.
+
+        :raises: AttributeError if attribute does not exist.
+        :param element: the name of the element
+        :param attribute: the name of the atrribute to remove
+        """
+        root = self._con.root()
+        if attribute not in root["elements"][element]:
+            raise AttributeError(
+                f"attribute {attribute} does not exist for element {element}"
+            )
+        else:
+            del root["elements"][element][attribute]
+            root["elements"]._p_changed = True
+
     def add_element(self, element: str) -> None:
         """
         :raises: AttributeError if element already exists.
