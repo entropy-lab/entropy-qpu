@@ -353,6 +353,26 @@ def test_add_elements_persistence(testdb):
         assert db.get("q_new", "p_new").value == "something"
 
 
+def test_add_and_remove_elements_persistence(testdb):
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        db.add_element("q_new")
+        db.add_attribute("q_new", "p_new", "something")
+        db.commit()
+        db.remove_attribute("q_new", "p_new")
+        db.commit()
+
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        with pytest.raises(AttributeError):
+            db.get("q_new", "p_new")
+
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        db.restore_from_history(1)
+        assert db.get("q_new", "p_new").value == "something"
+        db.restore_from_history(2)
+        with pytest.raises(AttributeError):
+            db.get("q_new", "p_new")
+
+
 def test_with_resolver(testdb, simp_resolver):
     with QpuDatabaseConnection(testdb, simp_resolver) as db:
         db.update_q(1, "p1", 555)
