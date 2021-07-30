@@ -4,7 +4,7 @@ from entropylab_qpudb import QuaConfig
 
 
 @pytest.fixture
-def config():
+def quaconfig() -> QuaConfig:
     pulse_len = 1000
     return QuaConfig(
         {
@@ -33,7 +33,7 @@ def config():
                     "smearing": 0,
                 },
                 "qe2": {
-                    "mixInputs": {"I": ("con1", 2), "Q": ("con1", 3)},
+                    "mixInputs": {"I": ("con1", 2), "Q": ("con1", 3), "mixer": "mxr1"},
                     "intermediate_frequency": 100e6,
                     "operations": {
                         "readoutOp": "readoutPulse",
@@ -89,19 +89,19 @@ def config():
     )
 
 
-def test_get_port_by_element_input(config):
+def test_get_port_by_element_input(quaconfig):
     # single
-    r = config.get_port_by_element_input("qe1", "single")
+    r = quaconfig.get_port_by_element_input("qe1", "single")
     assert r == ("con1", 1)
     # IQ pair
-    r = config.get_port_by_element_input("qe2", "I")
+    r = quaconfig.get_port_by_element_input("qe2", "I")
     assert r == ("con1", 2)
 
 
-def test_set_output_dc_offset_by_element(config):
+def test_set_output_dc_offset_by_element(quaconfig):
     # single
-    config.set_output_dc_offset_by_element("qe1", "single", 0.3)
-    assert config["controllers"]["con1"]["analog_outputs"][1]["offset"] == 0.3
+    quaconfig.set_output_dc_offset_by_element("qe1", "single", 0.3)
+    assert quaconfig["controllers"]["con1"]["analog_outputs"][1]["offset"] == 0.3
     # IQ pair
-    config.set_output_dc_offset_by_element("qe2", "I", 0.2)
-    assert config["controllers"]["con1"]["analog_outputs"][2]["offset"] == 0.2
+    quaconfig.set_output_dc_offset_by_element("qe2", "I", 0.2)
+    assert quaconfig["controllers"]["con1"]["analog_outputs"][2]["offset"] == 0.2

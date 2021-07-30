@@ -132,15 +132,16 @@ class QuaConfig(_UserDict):
             mixer = self.data["elements"][element]["mixInputs"]["mixer"]
             lo_freq = self.data["elements"][element]["mixInputs"]["lo_frequency"]
             found_entry_index = None
-            for entry in self.data["mixers"][mixer]:
+            for i, entry in enumerate(self.data["mixers"][mixer]):
                 if (
                     entry["intermediate_frequency"] == old_if
                     and entry["lo_frequency"] == lo_freq
                 ):
-                    found_entry_index = entry
+                    found_entry_index = i
             self.data["mixers"][mixer][found_entry_index][
                 "intermediate_frequency"
             ] = new_if
+        self.data["elements"][element]["intermediate_frequency"] = new_if
 
     def update_op_amp(self, element, operation, amp):
         pulse = self.get_pulse_from_op(element, operation)
