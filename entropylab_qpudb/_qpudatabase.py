@@ -283,6 +283,11 @@ class _QpuDatabaseConnectionBase(Resource):
         :param new_confidence_interval: (optional) a ConfidenceInterval object which holds the error in this parameter
         """
         root = self._con.root()
+
+        if element not in root["elements"]:
+            raise AttributeError(
+                f"element {element} does not exist for element {element}"
+            )
         if attribute not in root["elements"][element]:
             raise AttributeError(
                 f"attribute {attribute} does not exist for element {element}"
@@ -319,6 +324,11 @@ class _QpuDatabaseConnectionBase(Resource):
         :param new_confidence_interval: (optional) a ConfidenceInterval object which holds the error in this parameter
         """
         root = self._con.root()
+
+        if element not in root["elements"]:
+            raise AttributeError(
+                f"element {element} does not exist for element {element}"
+            )
         if attribute in root["elements"][element]:
             raise AttributeError(
                 f"attribute {attribute} already exists for element {element}"
@@ -342,6 +352,11 @@ class _QpuDatabaseConnectionBase(Resource):
         :param attribute: the name of the attribute to remove
         """
         root = self._con.root()
+
+        if element not in root["elements"]:
+            raise AttributeError(
+                f"element {element} does not exist for element {element}"
+            )
         if attribute not in root["elements"][element]:
             raise AttributeError(
                 f"attribute {attribute} does not exist for element {element}"
@@ -372,6 +387,10 @@ class _QpuDatabaseConnectionBase(Resource):
         data can be obtained
         """
         root = self._con.root()
+        if element not in root["elements"]:
+            raise AttributeError(
+                f"element {element} does not exist for element {element}"
+            )
         if attribute not in root["elements"][element]:
             raise AttributeError(
                 f"attribute {attribute} does not exist for element {element}"
