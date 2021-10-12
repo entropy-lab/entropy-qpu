@@ -1,4 +1,3 @@
-import dataclasses
 import json
 import os
 from copy import deepcopy
@@ -11,10 +10,10 @@ import ZODB
 import ZODB.FileStorage
 import pandas as pd
 import transaction
+from entropylab.instruments.instrument_driver import Resource
 from persistent import Persistent
 from persistent.list import PersistentList
 from persistent.mapping import PersistentMapping
-from entropylab.instruments.instrument_driver import Resource
 from zc.lockfile import LockError
 
 from entropylab_qpudb._resolver import DefaultResolver
@@ -30,6 +29,12 @@ class CalState(Enum):
         return self.name
 
 
+@dataclass(repr=True)
+class ConfidenceInterval:
+    error: float
+    confidence_level: float = -1
+
+
 @dataclass(repr=False)
 class QpuParameter(Persistent):
     """
@@ -39,6 +44,7 @@ class QpuParameter(Persistent):
     value: Any
     last_updated: datetime = None
     cal_state: CalState = CalState.UNCAL
+    confidence_interval: ConfidenceInterval = ConfidenceInterval(-1)
 
     def __post_init__(self):
         if self.last_updated is None:
@@ -51,17 +57,32 @@ class QpuParameter(Persistent):
             return (
                 f"QpuParameter(value={self.value}, "
                 f"last updated: {self.last_updated.strftime('%m/%d/%Y %H:%M:%S')}, "
-                f"calibration state: {self.cal_state})"
+                f"calibration state: {self.cal_state}), "
+                f"confidence_interval: {self.confidence_interval})"
             )
 
 
-FrozenQpuParameter = dataclasses.make_dataclass(
-    "FrozenQpuParameter",
-    [fld.name for fld in dataclasses.fields(QpuParameter)],
-    frozen=True,
-)
+@dataclass(repr=False, frozen=True)
+class FrozenQpuParameter:
+    """
+    A QPU parameter which stores values and modification status for QPU DB entries
+    """
 
-FrozenQpuParameter.__repr__ = QpuParameter.__repr__
+    value: Any
+    last_updated: datetime = None
+    cal_state: CalState = CalState.UNCAL
+    confidence_interval: ConfidenceInterval = ConfidenceInterval(-1)
+
+    def __repr__(self):
+        if self.value is None:
+            return "QpuParameter(None)"
+        else:
+            return (
+                f"QpuParameter(value={self.value}, "
+                f"last updated: {self.last_updated.strftime('%m/%d/%Y %H:%M:%S')}, "
+                f"calibration state: {self.cal_state}), "
+                f"confidence_interval: {self.confidence_interval})"
+            )
 
 
 def _db_file_from_path(path, dbname):
@@ -246,6 +267,7 @@ class _QpuDatabaseConnectionBase(Resource):
         attribute: str,
         value: Any,
         new_cal_state: Optional[CalState] = None,
+        new_confidence_interval: Optional[ConfidenceInterval] = None,
     ) -> None:
         """
         A generic function for modifying values of element attributes.
@@ -258,6 +280,7 @@ class _QpuDatabaseConnectionBase(Resource):
         :param attribute: The name of the attribute
         :param value: The value to modify
         :param new_cal_state: (optional) new calibration state specification
+        :param new_confidence_interval: (optional) a ConfidenceInterval object which holds the error in this parameter
         """
         root = self._con.root()
         if attribute not in root["elements"][element]:
@@ -266,9 +289,16 @@ class _QpuDatabaseConnectionBase(Resource):
             )
         if new_cal_state is None:
             new_cal_state = root["elements"][element][attribute].cal_state
+        if new_confidence_interval is None:
+            new_confidence_interval = root["elements"][element][
+                attribute
+            ].confidence_interval
         root["elements"][element][attribute].value = value
         root["elements"][element][attribute].last_updated = datetime.now()
         root["elements"][element][attribute].cal_state = new_cal_state
+        root["elements"][element][
+            attribute
+        ].confidence_interval = new_confidence_interval
 
     def add_attribute(
         self,
@@ -276,6 +306,7 @@ class _QpuDatabaseConnectionBase(Resource):
         attribute: str,
         value: Any = None,
         new_cal_state: Optional[CalState] = None,
+        new_confidence_interval: Optional[ConfidenceInterval] = None,
     ) -> None:
         """
         Adds an attribute to an existing element.
@@ -285,6 +316,7 @@ class _QpuDatabaseConnectionBase(Resource):
         :param attribute: the name of the new atrribute
         :param value: an optional value for the new attribute
         :param new_cal_state: an optional new cal state
+        :param new_confidence_interval: (optional) a ConfidenceInterval object which holds the error in this parameter
         """
         root = self._con.root()
         if attribute in root["elements"][element]:
@@ -295,6 +327,10 @@ class _QpuDatabaseConnectionBase(Resource):
             root["elements"][element][attribute] = QpuParameter(
                 value, datetime.now(), new_cal_state
             )
+            if new_confidence_interval is not None:
+                root["elements"][element][
+                    attribute
+                ].confidence_interval = new_confidence_interval
             root["elements"]._p_changed = True
 
     def remove_attribute(self, element: str, attribute: str) -> None:
@@ -303,7 +339,7 @@ class _QpuDatabaseConnectionBase(Resource):
 
         :raises: AttributeError if attribute does not exist.
         :param element: the name of the element
-        :param attribute: the name of the atrribute to remove
+        :param attribute: the name of the attribute to remove
         """
         root = self._con.root()
         if attribute not in root["elements"][element]:
@@ -341,7 +377,10 @@ class _QpuDatabaseConnectionBase(Resource):
                 f"attribute {attribute} does not exist for element {element}"
             )
         return FrozenQpuParameter(
-            **dataclasses.asdict(root["elements"][element][attribute])
+            deepcopy(root["elements"][element][attribute].value),
+            deepcopy(root["elements"][element][attribute].last_updated),
+            deepcopy(root["elements"][element][attribute].cal_state),
+            deepcopy(root["elements"][element][attribute].confidence_interval),
         )
 
     def commit(self, message: Optional[str] = None) -> None:
