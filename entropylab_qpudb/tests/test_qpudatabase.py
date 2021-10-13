@@ -1,5 +1,7 @@
 import os
+import shutil
 from dataclasses import FrozenInstanceError
+from distutils.dir_util import copy_tree
 from glob import glob
 from time import sleep
 
@@ -14,6 +16,7 @@ from entropylab_qpudb._qpudatabase import (
     create_new_qpu_database,
     QpuParameter,
     ReadOnlyError,
+    ConfidenceInterval,
 )
 
 
@@ -31,6 +34,8 @@ def testdb():
         "system": {"num_qubits": 2},
     }
     dbname = "testdb1"
+    for fl in glob(dbname + "*"):
+        os.remove(fl)
     create_new_qpu_database(dbname, testdict, force_create=True)
     yield dbname
     for fl in glob(dbname + "*"):
@@ -78,17 +83,23 @@ def test_open_empty():
 
 def test_open_from_path():
     testdict = {"q1": {"p1": 5}}
-    os.mkdir("testdir")
+    test_dir = "tests_cache/test_dir"
+    os.makedirs("tests_cache", exist_ok=True)
     try:
-        create_new_qpu_database("ptest", testdict, path="./testdir")
-        assert os.path.exists("testdir/ptest.fs")
-        db = _QpuDatabaseConnectionBase("ptest", path="testdir")
+        if os.path.exists(test_dir):
+            shutil.rmtree(test_dir)
+        os.mkdir(test_dir)
+        create_new_qpu_database("ptest", testdict, path=(f"./{test_dir}"))
+        assert os.path.exists(f"{test_dir}/ptest.fs")
+        db = _QpuDatabaseConnectionBase("ptest", path=(test_dir))
         assert db.get("q1", "p1").value == 5
         db.close()
     finally:
-        for fl in glob("testdir/*"):
-            os.remove(fl)
-        os.rmdir("testdir")
+        if os.path.exists(test_dir):
+            try:
+                shutil.rmtree(test_dir)
+            except:
+                print(f"Could not delete directory ${test_dir}")
 
 
 def test_open_without_creation():
@@ -353,6 +364,36 @@ def test_add_elements_persistence(testdb):
         assert db.get("q_new", "p_new").value == "something"
 
 
+def test_add_set_confidence_interval(testdb):
+    error = 1.2
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        db.add_element("q_new")
+        db.add_attribute(
+            "q_new",
+            "p_new",
+            "something",
+            new_confidence_interval=ConfidenceInterval(error),
+        )
+        db.commit()
+
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        assert db.get("q_new", "p_new").value == "something"
+        assert db.get("q_new", "p_new").confidence_interval.error == error
+
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        db.set(
+            "q_new",
+            "p_new",
+            "something1",
+            new_confidence_interval=ConfidenceInterval(error * 2),
+        )
+        db.commit()
+
+    with _QpuDatabaseConnectionBase(testdb) as db:
+        assert db.get("q_new", "p_new").value == "something1"
+        assert db.get("q_new", "p_new").confidence_interval.error == error * 2
+
+
 def test_add_and_remove_elements_persistence(testdb):
     with _QpuDatabaseConnectionBase(testdb) as db:
         db.add_element("q_new")
@@ -446,3 +487,44 @@ def test_we_can_open_all_history_items_in_same_connection(testdb):
             actual_values.append(db.q(1).p1.value)
 
     assert expected_values == actual_values
+
+
+def test_migration_add_elements_persistence(request):
+    db_name = "testdb1"
+    path = os.path.join(request.fspath.dirname, "test_dbs", "before_migration")
+    to_directory = "tests_cache/before_migration"
+    copy_tree(path, to_directory)
+
+    with _QpuDatabaseConnectionBase(db_name, path=to_directory) as db:
+        db.add_element("q_new")
+        db.add_attribute("q_new", "p_new", "something")
+        db.commit()
+
+    with _QpuDatabaseConnectionBase(db_name, path=to_directory) as db:
+        assert db.get("q_new", "p_new").value == "something"
+        assert db.get("q_new", "p_new").confidence_interval.error == -1
+
+
+def test_migration_add_and_remove_elements_persistence(request):
+    db_name = "testdb1"
+    path = os.path.join(request.fspath.dirname, "test_dbs", "before_migration")
+    to_directory = "tests_cache/before_migration"
+    copy_tree(path, to_directory)
+
+    with _QpuDatabaseConnectionBase(db_name, path=to_directory) as db:
+        db.add_element("q_new")
+        db.add_attribute("q_new", "p_new", "something")
+        db.commit()
+        db.remove_attribute("q_new", "p_new")
+        db.commit()
+
+    with _QpuDatabaseConnectionBase(db_name, path=to_directory) as db:
+        with pytest.raises(AttributeError):
+            db.get("q_new", "p_new")
+
+    with _QpuDatabaseConnectionBase(db_name, path=to_directory) as db:
+        db.restore_from_history(1)
+        assert db.get("q_new", "p_new").value == "something"
+        db.restore_from_history(2)
+        with pytest.raises(AttributeError):
+            db.get("q_new", "p_new")

@@ -137,3 +137,5 @@ reports
 *.fs*
 *.db
 .vscode/
+
+tests_cache
