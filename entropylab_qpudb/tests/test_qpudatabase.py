@@ -427,8 +427,9 @@ def test_with_resolver(testdb, simp_resolver):
 
 
 def test_use_in_entropy(testdb, simp_resolver):
+    entropy_db_dir = "tests_cache/entropy"
     try:
-        entropydb_name, qpudb_name = "entropy.db", testdb
+        entropydb_name, qpudb_name = entropy_db_dir, testdb
         entropydb = SqlAlchemyDB(entropydb_name)
         lab_resources = LabResources(entropydb)
         lab_resources.register_resource(
@@ -443,7 +444,7 @@ def test_use_in_entropy(testdb, simp_resolver):
         # todo: verify that we can load from snapshot
         experiment_resources.get_resource(testdb).close()
     finally:
-        os.remove("entropy.db")
+        shutil.rmtree(entropy_db_dir)
 
 
 def test_we_can_open_all_history_items(testdb):
